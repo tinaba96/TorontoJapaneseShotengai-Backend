@@ -1,154 +1,158 @@
-from typing import List, Optional
-from ..models import User, UserCreate, UserUpdate
-from ..core.security import get_password_hash, verify_password
-from .database import db
-from fastapi import HTTPException
-from datetime import datetime
+from app.crud.database import db
+from typing import Optional, List
+from fastapi import HTTPException, status
+from app.models import User, UserCreate, UserUpdate
+from app.core.utils import get_password_hash, verify_password
+from uuid import uuid4
 
 
 class UserCRUD:
     @staticmethod
     async def create(user: UserCreate) -> User:
+        """
+        Create a new user. If the id is provided, use it; otherwise, generate a random UUID.
+        """
         with db.get_session() as session:
-            # メールアドレスの重複チェック
+            # Check for existing user by email
             result = session.run(
-                "MATCH (u:User {email: $email}) RETURN u", email=user.email
+                "MATCH (u:User {email: $email}) RETURN u",
+                email=user.email
             )
             if result.single():
-                raise HTTPException(status_code=400, detail="Email already registered")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email is already registered."
+                )
 
-            # パスワードのハッシュ化
+            # Hash the user's password
             hashed_password = get_password_hash(user.password)
 
-            result = session.run(
+            # Set ID: Use provided id or generate a new random UUID
+            provided_id = user.id if user.id else None
+
+            # Create user in database
+            create_result = session.run(
                 """
                 CREATE (u:User {
+                    id: COALESCE($id, randomUUID()),  # Use provided id if exists; otherwise generate random UUID
                     name: $name,
                     email: $email,
                     hashed_password: $hashed_password,
                     created_at: datetime()
                 })
-                RETURN u
+                RETURN u.id AS id, u.name AS name, u.email AS email, u.created_at AS created_at
                 """,
+                id=provided_id,
                 name=user.name,
                 email=user.email,
                 hashed_password=hashed_password,
             )
-            record = result.single()
+            record = create_result.single()
             if not record:
-                raise HTTPException(status_code=400, detail="Failed to create user")
-            user_data = record["u"]
-            return User(
-                id=user_data.id,
-                name=user_data["name"],
-                email=user_data["email"],
-                created_at=user_data["created_at"].isoformat(),
-            )
+                raise HTTPException(status_code=500, detail="Failed to create user.")
 
-    @staticmethod
-    async def get_by_email(email: str) -> Optional[User]:
-        with db.get_session() as session:
-            result = session.run("MATCH (u:User {email: $email}) RETURN u", email=email)
-            record = result.single()
-            if not record:
-                return None
-            user_data = record["u"]
+            # Construct user object from query result
             return User(
-                id=user_data.id,
-                name=user_data["name"],
-                email=user_data["email"],
-                created_at=user_data["created_at"].isoformat(),
-            )
-
-    @staticmethod
-    async def authenticate_user(email: str, password: str) -> Optional[User]:
-        with db.get_session() as session:
-            result = session.run("MATCH (u:User {email: $email}) RETURN u", email=email)
-            record = result.single()
-            if not record:
-                return None
-            user_data = record["u"]
-            if not verify_password(password, user_data["hashed_password"]):
-                return None
-            return User(
-                id=user_data.id,
-                name=user_data["name"],
-                email=user_data["email"],
-                created_at=user_data["created_at"].isoformat(),
+                id=record["id"],  # Return id (generated or provided)
+                name=record["name"],
+                email=record["email"],
+                created_at=record["created_at"].isoformat(),
             )
 
     @staticmethod
     async def get_all() -> List[User]:
+        """
+        Retrieve all users from the database.
+        """
         with db.get_session() as session:
-            result = session.run("MATCH (u:User) RETURN u")
-            users = []
-            for record in result:
-                user_data = record["u"]
-                users.append(
-                    User(
-                        id=user_data.id,
-                        name=user_data["name"],
-                        email=user_data["email"],
-                        created_at=user_data["created_at"].isoformat(),
-                    )
+            result = session.run("MATCH (u:User) RETURN u")  # ユーザー全件取得
+            users = [
+                User(
+                    id=record["u"].get("id") or str(uuid4()),  # idがない場合、UUIDを生成
+                    name=record["u"]["name"],
+                    email=record["u"]["email"],
+                    created_at=record["u"]["created_at"].isoformat(),
                 )
+                for record in result
+            ]
             return users
 
+
     @staticmethod
-    async def get_by_id(user_id: int) -> User:
+    async def get_by_id(user_id: int) -> Optional[User]:
+        """
+        Retrieve a user by their ID.
+        """
         with db.get_session() as session:
             result = session.run(
-                "MATCH (u:User) WHERE id(u) = $user_id RETURN u", user_id=user_id
+                "MATCH (u:User {id: $id}) RETURN u", id=user_id
             )
             record = result.single()
-            if not record:
-                raise HTTPException(status_code=404, detail="User not found")
-            user_data = record["u"]
-            return User(
-                id=user_data.id,
-                name=user_data["name"],
-                email=user_data["email"],
-                created_at=user_data["created_at"].isoformat(),
-            )
+            if record:
+                user_data = record["u"]
+                return User(
+                    id=user_data["id"],
+                    name=user_data["name"],
+                    email=user_data["email"],
+                    created_at=user_data["created_at"].isoformat(),
+                )
+            return None
 
     @staticmethod
-    async def update(user_id: int, user: UserUpdate) -> User:
-        with db.get_session() as session:
-            update_fields = {}
-            if user.name is not None:
-                update_fields["name"] = user.name
-            if user.email is not None:
-                update_fields["email"] = user.email
-            if user.password is not None:
-                update_fields["hashed_password"] = get_password_hash(user.password)
-
-            if not update_fields:
-                raise HTTPException(status_code=400, detail="No fields to update")
-
-            query = """
-            MATCH (u:User)
-            WHERE id(u) = $user_id
-            SET u += $update_fields
-            RETURN u
-            """
-            result = session.run(query, user_id=user_id, update_fields=update_fields)
-            record = result.single()
-            if not record:
-                raise HTTPException(status_code=404, detail="User not found")
-            user_data = record["u"]
-            return User(
-                id=user_data.id,
-                name=user_data["name"],
-                email=user_data["email"],
-                created_at=user_data["created_at"].isoformat(),
-            )
-
-    @staticmethod
-    async def delete(user_id: int) -> dict:
+    async def update(user_id: int, user: UserUpdate) -> Optional[User]:
+        """
+        Update user details by ID.
+        """
         with db.get_session() as session:
             result = session.run(
-                "MATCH (u:User) WHERE id(u) = $user_id DELETE u", user_id=user_id
+                """
+                MATCH (u:User {id: $id})
+                SET u.name = $name, u.email = $email
+                RETURN u
+                """,
+                id=user_id, name=user.name, email=user.email
             )
-            if result.consume().counters.nodes_deleted == 0:
-                raise HTTPException(status_code=404, detail="User not found")
-            return {"message": "User deleted successfully"}
+            record = result.single()
+            if record:
+                user_data = record["u"]
+                return User(
+                    id=user_data["id"],
+                    name=user_data["name"],
+                    email=user_data["email"],
+                    created_at=user_data["created_at"].isoformat(),
+                )
+            return None
+
+    @staticmethod
+    async def delete(user_id: int) -> bool:
+        """
+        Delete a user by ID.
+        """
+        with db.get_session() as session:
+            result = session.run(
+                "MATCH (u:User {id: $id}) DELETE u",
+                id=user_id
+            )
+            return bool(result.summary().counters.nodes_deleted)
+
+    @staticmethod
+    async def authenticate_user(email: str, password: str) -> Optional[User]:
+        """
+        Verify user's email and password for authentication.
+        """
+        with db.get_session() as session:
+            result = session.run(
+                "MATCH (u:User {email: $email}) RETURN u", email=email
+            )
+            record = result.single()
+            if record:
+                user = record["u"]
+                # Verify the password with the hashed_password
+                if verify_password(password, user["hashed_password"]):
+                    return User(
+                        id=user["id"],
+                        name=user["name"],
+                        email=user["email"],
+                        created_at=user["created_at"].isoformat(),
+                    )
+        return None
