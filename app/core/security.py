@@ -1,26 +1,46 @@
-from passlib.context import CryptContext
 from datetime import datetime, timedelta
-from jose import jwt
+from typing import Optional
+from fastapi import Depends, HTTPException, status
+from jose import JWTError, jwt
+from fastapi.security import OAuth2PasswordBearer
+from app.core.utils import verify_password, get_password_hash, create_access_token  # utilsからインポート
 
-# パスワードのハッシュ化関連
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# OAuth2のスキーマを設定
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
-
-# JWTトークン関連
-SECRET_KEY = "your-secret-key"  # 環境変数に設定するのが良い
+# JWT設定
+SECRET_KEY = "your-secret-key"  # 環境変数で設定するのが推奨
 ALGORITHM = "HS256"
 
-def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
+async def decode_token(token: str = Depends(oauth2_scheme)) -> str:
+    """
+    トークンをデコードしてemailを抽出
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        if email is None:
+            raise credentials_exception
+        return email
+    except JWTError:
+        raise credentials_exception
+
+async def get_current_user(email: str = Depends(decode_token)):
+    """
+    トークンから取得したemailを利用して、現在のユーザーを取得
+    """
+    from app.crud.users import UserCRUD  # 遅延インポートで循環依存を回避
+
+    user = await UserCRUD.get_by_email(email)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return user
