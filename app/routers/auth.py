@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from datetime import timedelta
-from ..core.security import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from ..core.security import create_access_token
 from ..crud.users import UserCRUD
 from ..models.auth import Token
 from pydantic import BaseModel
+
+import os
+
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))  # Default to 30 if not set
 
 router = APIRouter()
 
