@@ -37,7 +37,7 @@ async def login(login_data: LoginRequest):
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-# 既存のOAuth2形式のエンドポイント（FastAPIの標準的な認証に使用）認証は要検討する
+# 既存のOAuth2形式のエンドポイント（FastAPIの標準的な認証に使用）
 @router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     user = await UserCRUD.authenticate_user(form_data.username, form_data.password)
