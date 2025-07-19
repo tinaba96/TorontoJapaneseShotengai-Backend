@@ -18,6 +18,8 @@ async def create_user(user: UserCreate):
         # 再スロー（詳細メッセージをそのまま利用するため）
         raise e
     except Exception as ex:
+
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create user: {str(ex)}",
