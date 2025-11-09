@@ -34,7 +34,7 @@ class UserCRUD:
             create_result = session.run(
                 """
                 CREATE (u:User {
-                    id: COALESCE($id, randomUUID()),  # Use provided id if exists; otherwise generate random UUID
+                    id: COALESCE($id, randomUUID()),
                     name: $name,
                     email: $email,
                     hashed_password: $hashed_password,
@@ -86,6 +86,26 @@ class UserCRUD:
         with db.get_session() as session:
             result = session.run(
                 "MATCH (u:User {id: $id}) RETURN u", id=user_id
+            )
+            record = result.single()
+            if record:
+                user_data = record["u"]
+                return User(
+                    id=user_data["id"],
+                    name=user_data["name"],
+                    email=user_data["email"],
+                    created_at=user_data["created_at"].isoformat(),
+                )
+            return None
+
+    @staticmethod
+    async def get_by_email(email: str) -> Optional[User]:
+        """
+        Retrieve a user by their email address.
+        """
+        with db.get_session() as session:
+            result = session.run(
+                "MATCH (u:User {email: $email}) RETURN u", email=email
             )
             record = result.single()
             if record:
