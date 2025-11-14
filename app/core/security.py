@@ -4,12 +4,13 @@ from fastapi import Depends, HTTPException, status
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
 from app.core.utils import verify_password, get_password_hash, create_access_token  # utilsからインポート
+import os
 
 # OAuth2のスキーマを設定
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # JWT設定
-SECRET_KEY = "your-secret-key"  # 環境変数で設定するのが推奨
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")  # 環境変数から読み込み
 ALGORITHM = "HS256"
 
 async def decode_token(token: str = Depends(oauth2_scheme)) -> str:
