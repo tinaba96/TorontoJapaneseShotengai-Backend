@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, users, events  # 必要に応じてモジュール名を変更
+from app.routers import auth, users, events, jobs  # 必要に応じてモジュール名を変更
 from dotenv import load_dotenv
 import os
 
@@ -22,6 +22,7 @@ app.add_middleware(
 app.include_router(auth.router, tags=["Authentication"])
 app.include_router(users.router, tags=["users"])
 app.include_router(events.router, tags=["events"])
+app.include_router(jobs.router, tags=["jobs"])
 
 @app.get("/")
 async def root():
