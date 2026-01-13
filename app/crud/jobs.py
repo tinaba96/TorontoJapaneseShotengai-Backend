@@ -1,6 +1,7 @@
 from app.crud.database import db
 from fastapi import HTTPException
 from app.models.job import Job, JobCreate
+from typing import List
 from uuid import uuid4
 
 
@@ -79,3 +80,33 @@ class JobCRUD:
                 created_at=job_data["created_at"].isoformat(),
                 updated_at=job_data["updated_at"].isoformat() if job_data.get("updated_at") else None,
             )
+
+    @staticmethod
+    async def get_all() -> List[Job]:
+        """
+        Retrieve all jobs from the database.
+        """
+        with db.get_session() as session:
+            result = session.run("MATCH (j:Job) RETURN j ORDER BY j.created_at DESC")
+            jobs = []
+            for record in result:
+                job_data = record["j"]
+                jobs.append(
+                    Job(
+                        id=job_data["id"],
+                        title=job_data["title"],
+                        description=job_data["description"],
+                        contactEmail=job_data["contactEmail"],
+                        contactPhone=job_data.get("contactPhone"),
+                        company=job_data["company"],
+                        salary=job_data["salary"],
+                        location=job_data["location"],
+                        jobType=job_data["jobType"],
+                        requirements=job_data.get("requirements"),
+                        creator_id=job_data["creator_id"],
+                        status=job_data["status"],
+                        created_at=job_data["created_at"].isoformat(),
+                        updated_at=job_data["updated_at"].isoformat() if job_data.get("updated_at") else None,
+                    )
+                )
+            return jobs
