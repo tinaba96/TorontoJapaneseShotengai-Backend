@@ -4,6 +4,8 @@ from .job import Job, JobCreate, JobUpdate
 from .product import Product, ProductCreate, ProductUpdate
 from .property import Property, PropertyCreate, PropertyUpdate
 from .store import Store, StoreCreate, StoreUpdate
+from .news import News, NewsCreate, NewsUpdate
+from .blog import Blog, BlogCreate, BlogUpdate
 
 __all__ = [
     "User", "UserCreate", "UserUpdate",
@@ -12,4 +14,6 @@ __all__ = [
     "Product", "ProductCreate", "ProductUpdate",
     "Property", "PropertyCreate", "PropertyUpdate",
     "Store", "StoreCreate", "StoreUpdate",
+    "News", "NewsCreate", "NewsUpdate",
+    "Blog", "BlogCreate", "BlogUpdate",
 ]

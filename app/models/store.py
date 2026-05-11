@@ -32,6 +32,10 @@ class Store(StoreBase):
     id: str
     creator_id: str
     status: str = "open"  # open, closed
+    position_x: float
+    position_y: float
+    mainGenre: str
+    subGenre: str
     created_at: str
     updated_at: Optional[str] = None
 
