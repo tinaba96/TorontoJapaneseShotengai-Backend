@@ -3,8 +3,9 @@ from typing import List
 import os
 
 from ..models.viewing import (
-    ViewingSlot,
-    ViewingSlotCreate,
+    AvailabilityWindow,
+    AvailabilityWindowCreate,
+    AvailabilitySlot,
     ViewingBooking,
     ViewingBookingCreate,
     CancelRequest,
@@ -19,10 +20,10 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 
 # ----- Public ------------------------------------------------------------
-@router.get("/slots", response_model=List[ViewingSlot])
+@router.get("/slots", response_model=List[AvailabilitySlot])
 async def list_slots():
-    """Public: list upcoming viewing slots with their current booking counts."""
-    return await ViewingCRUD.get_slots(upcoming_only=True)
+    """公開: 登録された期間から自動生成した30分スロット一覧（予約数つき）。"""
+    return await ViewingCRUD.get_available_slots()
 
 
 @router.post("/bookings", response_model=ViewingBooking, status_code=status.HTTP_201_CREATED)
@@ -30,13 +31,12 @@ async def create_booking(
     booking_in: ViewingBookingCreate,
     current_user=Depends(get_current_user),
 ):
-    """Authenticated (Google-logged-in) users book a viewing slot."""
+    """Googleログイン済みユーザーが、選択した30分枠を予約する。"""
     booking, cancel_token = await ViewingCRUD.create_booking(booking_in)
 
     cancel_url = f"{FRONTEND_URL}/viewing/cancel?token={cancel_token}"
     when = booking.starts_at or ""
 
-    # Confirmation to the visitor (best-effort).
     send_email(
         [booking.email],
         "【内見予約】ご予約を受け付けました",
@@ -49,7 +49,6 @@ async def create_booking(
             f"当日お会いできるのを楽しみにしております。"
         ),
     )
-    # Notification to admins (best-effort).
     send_email(
         admin_emails(),
         "【内見予約】新しい予約が入りました",
@@ -66,9 +65,8 @@ async def create_booking(
 
 @router.post("/cancel", response_model=ViewingBooking)
 async def cancel_booking(req: CancelRequest):
-    """Public: cancel a booking using the token from the confirmation email."""
+    """公開: 確認メールのトークンで予約をキャンセル。"""
     booking = await ViewingCRUD.cancel_by_token(req.token)
-
     when = booking.starts_at or ""
     send_email(
         admin_emails(),
@@ -84,22 +82,28 @@ async def cancel_booking(req: CancelRequest):
 
 
 # ----- Admin -------------------------------------------------------------
-@router.post("/slots", response_model=ViewingSlot, status_code=status.HTTP_201_CREATED)
-async def create_slot(slot: ViewingSlotCreate, admin=Depends(get_admin_user)):
-    """Admin: register an available 30-minute viewing slot."""
-    return await ViewingCRUD.create_slot(slot)
+@router.post("/windows", response_model=AvailabilityWindow, status_code=status.HTTP_201_CREATED)
+async def create_window(window: AvailabilityWindowCreate, admin=Depends(get_admin_user)):
+    """Admin: 内見可能な期間（開始〜終了）を登録。この範囲の30分枠が選べるようになる。"""
+    return await ViewingCRUD.create_window(window)
 
 
-@router.delete("/slots/{slot_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_slot(slot_id: str, admin=Depends(get_admin_user)):
-    """Admin: delete a slot (only if it has no active bookings)."""
-    ok = await ViewingCRUD.delete_slot(slot_id)
+@router.get("/windows", response_model=List[AvailabilityWindow])
+async def list_windows(admin=Depends(get_admin_user)):
+    """Admin: 登録済みの可能期間一覧。"""
+    return await ViewingCRUD.get_windows(upcoming_only=False)
+
+
+@router.delete("/windows/{window_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_window(window_id: str, admin=Depends(get_admin_user)):
+    """Admin: 期間を削除（範囲内に有効な予約があると 409）。"""
+    ok = await ViewingCRUD.delete_window(window_id)
     if not ok:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Slot not found.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Window not found.")
     return None
 
 
 @router.get("/bookings", response_model=List[ViewingBooking])
 async def list_bookings(admin=Depends(get_admin_user)):
-    """Admin: see who is coming and when."""
+    """Admin: 予約一覧（誰がいつ来るか）。"""
     return await ViewingCRUD.get_bookings()
