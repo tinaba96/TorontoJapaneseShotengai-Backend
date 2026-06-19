@@ -45,3 +45,18 @@ async def get_current_user(email: str = Depends(decode_token)):
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+async def get_admin_user(current_user=Depends(get_current_user)):
+    """
+    現在のユーザーが管理者（ADMIN_EMAILS に含まれる）かどうかを検証する。
+    内見予約の管理画面など、運営者専用エンドポイントの保護に使う。
+    """
+    from app.core.email import admin_emails  # 遅延インポートで循環依存を回避
+
+    if current_user.email.lower() not in admin_emails():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required.",
+        )
+    return current_user

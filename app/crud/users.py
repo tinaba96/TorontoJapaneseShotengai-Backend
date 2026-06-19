@@ -60,6 +60,39 @@ class UserCRUD:
             )
 
     @staticmethod
+    async def upsert_oauth_user(email: str, name: str) -> User:
+        """
+        Get an existing user by email, or create one for an OAuth (Google) login.
+        OAuth users have no password. Used by the /auth/google endpoint.
+        """
+        with db.get_session() as session:
+            result = session.run(
+                """
+                MERGE (u:User {email: $email})
+                ON CREATE SET
+                    u.id = randomUUID(),
+                    u.name = $name,
+                    u.auth_provider = 'google',
+                    u.created_at = datetime()
+                ON MATCH SET
+                    u.name = COALESCE(u.name, $name)
+                RETURN u
+                """,
+                email=email,
+                name=name,
+            )
+            record = result.single()
+            if not record:
+                raise HTTPException(status_code=500, detail="Failed to upsert user.")
+            user_data = record["u"]
+            return User(
+                id=user_data["id"],
+                name=user_data.get("name") or name,
+                email=user_data["email"],
+                created_at=user_data["created_at"].isoformat(),
+            )
+
+    @staticmethod
     async def get_all() -> List[User]:
         """
         Retrieve all users from the database.
