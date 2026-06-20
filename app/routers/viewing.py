@@ -17,6 +17,9 @@ from ..core.email import send_email, admin_emails
 router = APIRouter(prefix="/viewing", tags=["viewing"])
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+# メール文面で使う公開サイトURLと物件名（env で上書き可）
+SITE_URL = os.getenv("SITE_URL", "https://www.toronto-shotengai.com")
+PROPERTY_NAME = os.getenv("PROPERTY_NAME", "Toronto Japanese Shotengai Rentals")
 
 
 # ----- Public ------------------------------------------------------------
@@ -39,14 +42,20 @@ async def create_booking(
 
     send_email(
         [booking.email],
-        "【内見予約】ご予約を受け付けました",
+        f"【内見予約】{PROPERTY_NAME} のご予約を受け付けました",
         (
             f"{booking.name} 様\n\n"
-            f"内見のご予約を受け付けました。\n"
-            f"日時(UTC): {when}\n\n"
-            f"ご都合が悪くなった場合は、以下のリンクからキャンセルできます:\n"
+            f"この度は「{PROPERTY_NAME}」の内見をご予約いただきありがとうございます。\n"
+            f"以下の内容でお申し込みを受け付けました。\n\n"
+            f"▼ ご予約内容\n"
+            f"物件: {PROPERTY_NAME}\n"
+            f"内見日時(UTC): {when}\n\n"
+            f"物件の詳細はこちら:\n"
+            f"{SITE_URL}\n\n"
+            f"ご都合が悪くなった場合は、以下のリンクからいつでもキャンセルできます:\n"
             f"{cancel_url}\n\n"
-            f"当日お会いできるのを楽しみにしております。"
+            f"当日お会いできるのを楽しみにしております。\n"
+            f"{PROPERTY_NAME}"
         ),
     )
     send_email(
