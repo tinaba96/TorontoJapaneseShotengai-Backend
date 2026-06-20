@@ -6,25 +6,38 @@ import os
 try:
     from zoneinfo import ZoneInfo
     TORONTO_TZ = ZoneInfo("America/Toronto")
+    TOKYO_TZ = ZoneInfo("Asia/Tokyo")
 except Exception:  # zoneinfo/tzdata が無い環境ではUTC表記にフォールバック
     TORONTO_TZ = None
+    TOKYO_TZ = None
 
 _WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
 
 
 def format_toronto(iso_str: str) -> str:
-    """UTCのISO文字列を『2026年6月21日(土) 14:00（トロント時間）』形式に整形。"""
+    """
+    UTCのISO文字列を、トロント時間（日本時間を括弧補足）に整形。
+    例: 2026年6月21日(日) 14:00（トロント時間 / 日本時間 6月22日(月) 03:00）
+    """
     if not iso_str:
         return ""
     try:
         dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        if TORONTO_TZ is not None:
-            dt = dt.astimezone(TORONTO_TZ)
-            wd = _WEEKDAYS_JA[dt.weekday()]
-            return f"{dt.year}年{dt.month}月{dt.day}日({wd}) {dt.strftime('%H:%M')}（トロント時間）"
-        return f"{iso_str} (UTC)"
+        if TORONTO_TZ is None:
+            return f"{iso_str} (UTC)"
+        t = dt.astimezone(TORONTO_TZ)
+        tw = _WEEKDAYS_JA[t.weekday()]
+        base = f"{t.year}年{t.month}月{t.day}日({tw}) {t.strftime('%H:%M')}"
+        if TOKYO_TZ is not None:
+            j = dt.astimezone(TOKYO_TZ)
+            jw = _WEEKDAYS_JA[j.weekday()]
+            return (
+                f"{base}（トロント時間 / 日本時間 "
+                f"{j.month}月{j.day}日({jw}) {j.strftime('%H:%M')}）"
+            )
+        return f"{base}（トロント時間）"
     except Exception:
         return iso_str
 
