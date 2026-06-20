@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import auth, users, events, jobs, products, properties, stores, news, blogs, viewing, board  # 必要に応じてモジュール名を変更
+from app.routers import auth, users, events, jobs, products, properties, stores, news, blogs, viewing, board, contact  # 必要に応じてモジュール名を変更
 from dotenv import load_dotenv
 import os
 
@@ -30,6 +30,7 @@ app.include_router(news.router, tags=["news"])
 app.include_router(blogs.router, tags=["blogs"])
 app.include_router(viewing.router)
 app.include_router(board.router)
+app.include_router(contact.router)
 
 @app.get("/")
 async def root():
