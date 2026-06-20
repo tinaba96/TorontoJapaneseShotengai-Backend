@@ -59,6 +59,9 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 # メール文面で使う公開サイトURLと物件名（env で上書き可）
 SITE_URL = os.getenv("SITE_URL", "https://www.toronto-shotengai.com")
 PROPERTY_NAME = os.getenv("PROPERTY_NAME", "Toronto Japanese Shotengai Rentals")
+# 住所はコード/Gitに置かず env から（adminが手動送信する内見住所）
+PROPERTY_ADDRESS = os.getenv("PROPERTY_ADDRESS", "")
+PROPERTY_ADDRESS_NOTE = os.getenv("PROPERTY_ADDRESS_NOTE", "")
 
 
 # ----- Public ------------------------------------------------------------
@@ -172,3 +175,39 @@ async def delete_window(window_id: str, admin=Depends(get_admin_user)):
 async def list_bookings(admin=Depends(get_admin_user)):
     """Admin: 予約一覧（誰がいつ来るか）。"""
     return await ViewingCRUD.get_bookings()
+
+
+@router.post("/bookings/{booking_id}/send-address", response_model=ViewingBooking)
+async def send_address(booking_id: str, admin=Depends(get_admin_user)):
+    """Admin: 予約を確認した上で、その予約者へ内見の住所をメール送信する。"""
+    if not PROPERTY_ADDRESS:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="PROPERTY_ADDRESS が未設定です（環境変数を設定してください）。",
+        )
+    booking = await ViewingCRUD.get_booking(booking_id)
+    when = format_toronto(booking.starts_at)
+    note = f"\n{PROPERTY_ADDRESS_NOTE}\n" if PROPERTY_ADDRESS_NOTE else ""
+
+    ok = send_email(
+        [booking.email],
+        f"【内見のご案内】{PROPERTY_NAME} 内見場所のご案内",
+        (
+            f"{booking.name} 様\n\n"
+            f"内見のご予約ありがとうございます。下記の日時・場所でお待ちしております。\n\n"
+            f"▼ 内見日時\n{when}\n\n"
+            f"▼ 内見場所（住所）\n{PROPERTY_ADDRESS}\n{note}\n"
+            f"当日お会いできるのを楽しみにしております。\n"
+            f"ご不明な点や道に迷った際は、このメールにご返信いただくかLINEでお気軽にご連絡ください。\n\n"
+            f"{PROPERTY_NAME}\n{SITE_URL}"
+        ),
+    )
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="メール送信に失敗しました。時間をおいて再度お試しください。",
+        )
+
+    await ViewingCRUD.mark_address_sent(booking_id)
+    booking.address_sent = True
+    return booking

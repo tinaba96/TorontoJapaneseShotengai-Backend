@@ -38,6 +38,7 @@ class ViewingBooking(BaseModel):
     phone: Optional[str] = None
     status: str = "active"  # active | cancelled
     created_at: str
+    address_sent: bool = False  # 住所メールを送信済みか
 
     class Config:
         orm_mode = True

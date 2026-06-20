@@ -226,9 +226,39 @@ class ViewingCRUD:
                         phone=bd.get("phone"),
                         status=bd["status"],
                         created_at=_native(bd["created_at"]).isoformat(),
+                        address_sent=bool(bd.get("address_sent_at")),
                     )
                 )
             return out
+
+    @staticmethod
+    async def get_booking(booking_id: str) -> ViewingBooking:
+        with db.get_session() as session:
+            rec = session.run(
+                "MATCH (b:ViewingBooking {id: $id}) RETURN b", id=booking_id
+            ).single()
+            if not rec:
+                raise HTTPException(status_code=404, detail="Booking not found.")
+            bd = rec["b"]
+            starts_at = bd.get("starts_at")
+            return ViewingBooking(
+                id=bd["id"],
+                starts_at=_native(starts_at).isoformat() if starts_at else None,
+                name=bd["name"],
+                email=bd["email"],
+                phone=bd.get("phone"),
+                status=bd["status"],
+                created_at=_native(bd["created_at"]).isoformat(),
+                address_sent=bool(bd.get("address_sent_at")),
+            )
+
+    @staticmethod
+    async def mark_address_sent(booking_id: str) -> None:
+        with db.get_session() as session:
+            session.run(
+                "MATCH (b:ViewingBooking {id: $id}) SET b.address_sent_at = datetime()",
+                id=booking_id,
+            )
 
     @staticmethod
     async def cancel_by_token(token: str) -> ViewingBooking:
