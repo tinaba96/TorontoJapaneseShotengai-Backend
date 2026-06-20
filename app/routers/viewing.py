@@ -1,6 +1,32 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
+from datetime import datetime, timezone
 import os
+
+try:
+    from zoneinfo import ZoneInfo
+    TORONTO_TZ = ZoneInfo("America/Toronto")
+except Exception:  # zoneinfo/tzdata が無い環境ではUTC表記にフォールバック
+    TORONTO_TZ = None
+
+_WEEKDAYS_JA = ["月", "火", "水", "木", "金", "土", "日"]
+
+
+def format_toronto(iso_str: str) -> str:
+    """UTCのISO文字列を『2026年6月21日(土) 14:00（トロント時間）』形式に整形。"""
+    if not iso_str:
+        return ""
+    try:
+        dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if TORONTO_TZ is not None:
+            dt = dt.astimezone(TORONTO_TZ)
+            wd = _WEEKDAYS_JA[dt.weekday()]
+            return f"{dt.year}年{dt.month}月{dt.day}日({wd}) {dt.strftime('%H:%M')}（トロント時間）"
+        return f"{iso_str} (UTC)"
+    except Exception:
+        return iso_str
 
 from ..models.viewing import (
     AvailabilityWindow,
@@ -38,7 +64,7 @@ async def create_booking(
     booking, cancel_token = await ViewingCRUD.create_booking(booking_in)
 
     cancel_url = f"{FRONTEND_URL}/viewing/cancel?token={cancel_token}"
-    when = booking.starts_at or ""
+    when = format_toronto(booking.starts_at)
 
     send_email(
         [booking.email],
@@ -49,7 +75,7 @@ async def create_booking(
             f"以下の内容でお申し込みを受け付けました。\n\n"
             f"▼ ご予約内容\n"
             f"物件: {PROPERTY_NAME}\n"
-            f"内見日時(UTC): {when}\n\n"
+            f"内見日時: {when}\n\n"
             f"物件の詳細はこちら:\n"
             f"{SITE_URL}\n\n"
             f"ご都合が悪くなった場合は、以下のリンクからいつでもキャンセルできます:\n"
@@ -66,7 +92,7 @@ async def create_booking(
             f"名前: {booking.name}\n"
             f"メール: {booking.email}\n"
             f"電話: {booking.phone or '-'}\n"
-            f"日時(UTC): {when}"
+            f"日時: {when}"
         ),
     )
     return booking
@@ -76,7 +102,24 @@ async def create_booking(
 async def cancel_booking(req: CancelRequest):
     """公開: 確認メールのトークンで予約をキャンセル。"""
     booking = await ViewingCRUD.cancel_by_token(req.token)
-    when = booking.starts_at or ""
+    when = format_toronto(booking.starts_at)
+
+    # 予約者本人へキャンセル確認
+    send_email(
+        [booking.email],
+        f"【内見予約】{PROPERTY_NAME} のご予約をキャンセルしました",
+        (
+            f"{booking.name} 様\n\n"
+            f"以下の内見予約をキャンセルしました。\n\n"
+            f"▼ キャンセルした予約\n"
+            f"物件: {PROPERTY_NAME}\n"
+            f"内見日時: {when}\n\n"
+            f"またのご予約をお待ちしております。\n"
+            f"{SITE_URL}\n\n"
+            f"{PROPERTY_NAME}"
+        ),
+    )
+    # admin へ通知
     send_email(
         admin_emails(),
         "【内見予約】予約がキャンセルされました",
@@ -84,7 +127,7 @@ async def cancel_booking(req: CancelRequest):
             f"以下の内見予約がキャンセルされました。\n\n"
             f"名前: {booking.name}\n"
             f"メール: {booking.email}\n"
-            f"日時(UTC): {when}"
+            f"日時: {when}"
         ),
     )
     return booking
