@@ -8,6 +8,8 @@ import os
 
 # OAuth2のスキーマを設定
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+# 任意認証用（トークンが無くてもエラーにしない）
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 # JWT設定
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key")  # 環境変数から読み込み
@@ -45,6 +47,25 @@ async def get_current_user(email: str = Depends(decode_token)):
             headers={"WWW-Authenticate": "Bearer"},
         )
     return user
+
+
+async def get_optional_user(token: Optional[str] = Depends(oauth2_scheme_optional)):
+    """
+    トークンがあればユーザーを返し、無ければ None を返す（公開エンドポイントで、
+    ログイン中なら追加情報を出したい場合に使う）。検証失敗時も None。
+    """
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        if not email:
+            return None
+    except JWTError:
+        return None
+    from app.crud.users import UserCRUD  # 遅延インポートで循環依存を回避
+
+    return await UserCRUD.get_by_email(email)
 
 
 async def get_admin_user(current_user=Depends(get_current_user)):
