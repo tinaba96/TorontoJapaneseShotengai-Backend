@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from pydantic import BaseModel
 
 # リアクションで使える絵文字（固定）
@@ -8,10 +8,12 @@ ALLOWED_EMOJIS = ["👍", "❤️", "😂", "😮", "🎉", "🙏"]
 class BoardPostCreate(BaseModel):
     title: str
     body: str
+    display_name: Optional[str] = None  # 表示名（空なら「匿名」）
 
 
 class CommentCreate(BaseModel):
     body: str
+    display_name: Optional[str] = None  # 表示名（空なら「匿名」）
 
 
 class ReactionRequest(BaseModel):

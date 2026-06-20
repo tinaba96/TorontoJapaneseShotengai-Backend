@@ -30,9 +30,10 @@ async def list_posts():
 
 @router.post("/posts", response_model=BoardPostDetail, status_code=status.HTTP_201_CREATED)
 async def create_post(post: BoardPostCreate, current_user=Depends(get_current_user)):
-    """投稿作成（ログイン必須）。"""
+    """投稿作成（ログイン必須）。表示名はニックネーム or「匿名」。実名は出さない。"""
+    display = (post.display_name or "").strip() or "匿名"
     pid = await BoardCRUD.create_post(
-        post.title, post.body, current_user.name, current_user.email
+        post.title, post.body, display, current_user.email
     )
     return await BoardCRUD.get_post(pid, current_user.email, _is_admin(current_user))
 
@@ -54,9 +55,10 @@ async def delete_post(post_id: str, current_user=Depends(get_current_user)):
 # ----- Comments ----------------------------------------------------------
 @router.post("/posts/{post_id}/comments", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
 async def add_comment(post_id: str, comment: CommentCreate, current_user=Depends(get_current_user)):
-    """コメント作成（ログイン必須）。"""
+    """コメント作成（ログイン必須）。表示名はニックネーム or「匿名」。実名は出さない。"""
+    display = (comment.display_name or "").strip() or "匿名"
     return await BoardCRUD.add_comment(
-        post_id, comment.body, current_user.name, current_user.email
+        post_id, comment.body, display, current_user.email
     )
 
 
