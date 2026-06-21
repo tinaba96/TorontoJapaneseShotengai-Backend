@@ -10,6 +10,11 @@ SITE_URL = os.getenv("SITE_URL", "https://www.toronto-shotengai.com")
 PROPERTY_NAME = os.getenv("PROPERTY_NAME", "Toronto Japanese Shotengai Rentals")
 
 
+def _admin_reply_to() -> str:
+    emails = admin_emails()
+    return os.getenv("REPLY_TO") or (emails[0] if emails else "")
+
+
 @router.post("")
 async def submit_contact(req: ContactRequest):
     """公開: 物件に関する質問を受け付け、admin へ通知＋送信者へ自動返信。"""
@@ -31,6 +36,7 @@ async def submit_contact(req: ContactRequest):
             f"------------------------------\n\n"
             f"このメールに返信すると {req.email} 宛に送れます。"
         ),
+        reply_to=req.email,
     )
     if not ok:
         raise HTTPException(
@@ -52,5 +58,6 @@ async def submit_contact(req: ContactRequest):
             f"物件の詳細はこちら:\n{SITE_URL}\n\n"
             f"{PROPERTY_NAME}"
         ),
+        reply_to=_admin_reply_to(),
     )
     return {"ok": True}

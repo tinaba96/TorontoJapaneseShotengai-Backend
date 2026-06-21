@@ -64,6 +64,12 @@ PROPERTY_ADDRESS = os.getenv("PROPERTY_ADDRESS", "")
 PROPERTY_ADDRESS_NOTE = os.getenv("PROPERTY_ADDRESS_NOTE", "")
 
 
+def _admin_reply_to() -> str:
+    """予約者が『返信』したときに届く宛先（admin）。REPLY_TO 優先、無ければ ADMIN_EMAILS の先頭。"""
+    emails = admin_emails()
+    return os.getenv("REPLY_TO") or (emails[0] if emails else "")
+
+
 # ----- Public ------------------------------------------------------------
 @router.get("/slots", response_model=List[AvailabilitySlot])
 async def list_slots():
@@ -99,6 +105,7 @@ async def create_booking(
             f"当日お会いできるのを楽しみにしております。\n"
             f"{PROPERTY_NAME}"
         ),
+        reply_to=_admin_reply_to(),
     )
     send_email(
         admin_emails(),
@@ -110,6 +117,7 @@ async def create_booking(
             f"電話: {booking.phone or '-'}\n"
             f"日時: {when}"
         ),
+        reply_to=booking.email,
     )
     return booking
 
@@ -134,6 +142,7 @@ async def cancel_booking(req: CancelRequest):
             f"{SITE_URL}\n\n"
             f"{PROPERTY_NAME}"
         ),
+        reply_to=_admin_reply_to(),
     )
     # admin へ通知
     send_email(
@@ -145,6 +154,7 @@ async def cancel_booking(req: CancelRequest):
             f"メール: {booking.email}\n"
             f"日時: {when}"
         ),
+        reply_to=booking.email,
     )
     return booking
 
@@ -201,6 +211,7 @@ async def send_address(booking_id: str, admin=Depends(get_admin_user)):
             f"ご不明な点や道に迷った際は、このメールにご返信いただくかLINEでお気軽にご連絡ください。\n\n"
             f"{PROPERTY_NAME}\n{SITE_URL}"
         ),
+        reply_to=_admin_reply_to(),
     )
     if not ok:
         raise HTTPException(

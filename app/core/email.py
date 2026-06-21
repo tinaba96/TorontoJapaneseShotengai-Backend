@@ -13,7 +13,7 @@ import os
 import ssl
 import smtplib
 from email.message import EmailMessage
-from typing import List
+from typing import List, Optional
 
 
 def admin_emails() -> List[str]:
@@ -27,7 +27,9 @@ def _email_from() -> str:
     return os.getenv("EMAIL_FROM") or os.getenv("SMTP_FROM") or ""
 
 
-def _send_via_resend(recipients: List[str], subject: str, body: str) -> bool:
+def _send_via_resend(
+    recipients: List[str], subject: str, body: str, reply_to: Optional[str] = None
+) -> bool:
     api_key = os.getenv("RESEND_API_KEY")
     sender = _email_from()
     if not api_key or not sender:
@@ -35,18 +37,22 @@ def _send_via_resend(recipients: List[str], subject: str, body: str) -> bool:
     try:
         import requests  # requirements に同梱済み
 
+        payload = {
+            "from": sender,
+            "to": recipients,
+            "subject": subject,
+            "text": body,
+        }
+        if reply_to:
+            payload["reply_to"] = reply_to
+
         resp = requests.post(
             "https://api.resend.com/emails",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
-            json={
-                "from": sender,
-                "to": recipients,
-                "subject": subject,
-                "text": body,
-            },
+            json=payload,
             timeout=10,
         )
         if resp.status_code in (200, 201):
@@ -62,7 +68,9 @@ def _smtp_configured() -> bool:
     return bool(os.getenv("SMTP_HOST") and _email_from())
 
 
-def _send_via_smtp(recipients: List[str], subject: str, body: str) -> bool:
+def _send_via_smtp(
+    recipients: List[str], subject: str, body: str, reply_to: Optional[str] = None
+) -> bool:
     host = os.getenv("SMTP_HOST")
     port = int(os.getenv("SMTP_PORT", "587"))
     user = os.getenv("SMTP_USER")
@@ -73,6 +81,8 @@ def _send_via_smtp(recipients: List[str], subject: str, body: str) -> bool:
         msg["Subject"] = subject
         msg["From"] = sender
         msg["To"] = ", ".join(recipients)
+        if reply_to:
+            msg["Reply-To"] = reply_to
         msg.set_content(body)
 
         context = ssl.create_default_context()
@@ -87,9 +97,12 @@ def _send_via_smtp(recipients: List[str], subject: str, body: str) -> bool:
         return False
 
 
-def send_email(to: List[str], subject: str, body: str) -> bool:
+def send_email(
+    to: List[str], subject: str, body: str, reply_to: Optional[str] = None
+) -> bool:
     """
     プレーンテキストメールを送る（ベストエフォート）。送れたら True。
+    reply_to を渡すと、受信者が「返信」したときの宛先になる。
     Resend → SMTP の順に試す。どちらも未設定ならスキップ。
     """
     recipients = [t for t in to if t]
@@ -98,13 +111,13 @@ def send_email(to: List[str], subject: str, body: str) -> bool:
 
     # 1) Resend (HTTP)
     if os.getenv("RESEND_API_KEY") and _email_from():
-        if _send_via_resend(recipients, subject, body):
+        if _send_via_resend(recipients, subject, body, reply_to):
             return True
         # Resendが失敗してもSMTP設定があれば続けて試す
 
     # 2) SMTP
     if _smtp_configured():
-        return _send_via_smtp(recipients, subject, body)
+        return _send_via_smtp(recipients, subject, body, reply_to)
 
     print(f"[email:skip] No email transport configured. Would send to {recipients}: {subject}")
     return False
